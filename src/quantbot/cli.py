@@ -288,6 +288,33 @@ def paper_run(
     asyncio.run(runner.run(ms, duration_seconds=duration))
 
 
+# ---------------------------------------------------------------- dashboard
+@app.command("dashboard")
+def dashboard(
+    config: Optional[Path] = _CONFIG_OPT,
+    port: int = typer.Option(8000, help="HTTP port"),
+    top: int = typer.Option(10, help="Trade the top-N liquid markets"),
+    poll: float = typer.Option(30.0, help="Poll interval seconds"),
+    observe: bool = typer.Option(False, help="Dashboard only — no paper trading"),
+    resume: bool = typer.Option(True, help="Resume previous paper run state"),
+):
+    """Run the trading dashboard (paper engine + web UI at http://localhost:PORT)."""
+    import uvicorn
+
+    cfg = _boot(config)
+    from quantbot.api.server import create_app
+
+    store = _store(cfg)
+    if not observe and not store.load_markets(active_only=True):
+        console.print("[red]no markets stored — run `quantbot markets sync` first[/red]")
+        raise typer.Exit(1)
+    app_ = create_app(
+        cfg, store, with_paper=not observe, top=top, poll=poll, resume=resume
+    )
+    console.print(f"[green]QuantBot dashboard: http://localhost:{port}[/green]")
+    uvicorn.run(app_, host="127.0.0.1", port=port, log_level="warning")
+
+
 # ---------------------------------------------------------------- report
 @report_app.command("runs")
 def report_runs(strategy: Optional[str] = None):

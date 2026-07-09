@@ -21,6 +21,8 @@ dependencies = [
     "pandas>=2.2",
     "pyarrow>=16.0",
     "scipy>=1.13",
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.30",
 ]
 
 [project.optional-dependencies]

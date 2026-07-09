@@ -32,12 +32,26 @@ quantbot backtest run mean_reversion --params '{"entry_z": 2.0}'
 # 4. Walk-forward validation (the number that counts)
 quantbot backtest walkforward mean_reversion --grid '{"entry_z": [1.5, 2.0, 2.5]}' --folds 4
 
-# 5. Paper trade against real books
-quantbot paper run --top 10 --poll 30
+# 5. Paper trade with the live dashboard (http://localhost:8000)
+quantbot dashboard
 
 # 6. Review experiments
 quantbot report runs
 ```
+
+**New to trading?** Read [HOW_TO_USE_QUANTBOT.md](HOW_TO_USE_QUANTBOT.md) —
+a complete beginner's guide to the platform, the research pipeline, the
+metrics, and the (deliberately strict) path to live trading.
+
+## The dashboard
+
+`quantbot dashboard` runs the paper-trading engine plus a real-time web UI:
+live portfolio/PnL/drawdown, per-model fair values with disagreement,
+order-book visualization, a decision feed where **every trade and rejection
+is fully explainable** (evidence → sizing math → risk verdict → fill), a
+post-trade report for every close, a strategy promotion pipeline
+(research → paper → candidate; live is never automatic), auto-generated
+daily reports, and crash-safe state resume for weeks-long unattended runs.
 
 ## Architecture (one paragraph)
 

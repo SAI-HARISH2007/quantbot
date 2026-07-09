@@ -49,6 +49,47 @@ def kelly_fraction_binary(q: float, price: float, side: Side) -> float:
     return max(edge / p, 0.0)
 
 
+def size_order_explain(
+    signal: Signal,
+    equity: float,
+    price: float,
+    cfg: RiskConfig,
+) -> tuple[float, dict]:
+    """Return (size_in_shares, step-by-step breakdown). size 0 = don't trade.
+    The breakdown feeds decision records so every position size is auditable."""
+    explain: dict = {"equity": equity, "price": price, "side": signal.side.value}
+    if signal.fair_value is not None:
+        f_kelly = kelly_fraction_binary(signal.fair_value, price, signal.side)
+        explain["method"] = "kelly"
+        explain["kelly_full"] = f_kelly
+    else:
+        f_kelly = min(signal.edge * 2.0, 0.5)
+        explain["method"] = "edge_proportional"
+        explain["edge_stake"] = f_kelly
+    f = f_kelly * cfg.kelly_fraction * min(max(signal.confidence, 0.0), 1.0)
+    explain["kelly_fraction_cfg"] = cfg.kelly_fraction
+    explain["confidence"] = signal.confidence
+    explain["fraction_after_scaling"] = f
+    capped = min(f, cfg.max_kelly_stake_pct)
+    explain["max_stake_pct_cap"] = cfg.max_kelly_stake_pct
+    explain["cap_applied"] = capped < f
+    notional = min(equity * capped, cfg.max_position_per_market)
+    explain["notional"] = notional
+    explain["per_market_cap"] = cfg.max_position_per_market
+    if notional < cfg.min_order_notional:
+        explain["result"] = f"below min order notional (${cfg.min_order_notional})"
+        return 0.0, explain
+    cost_per_share = price if signal.side == Side.BUY else (1.0 - price)
+    if cost_per_share <= 0:
+        explain["result"] = "non-positive cost per share"
+        return 0.0, explain
+    size = notional / cost_per_share
+    explain["cost_per_share"] = cost_per_share
+    explain["size_shares"] = size
+    explain["result"] = "sized"
+    return size, explain
+
+
 def size_order(
     signal: Signal,
     equity: float,
@@ -56,18 +97,5 @@ def size_order(
     cfg: RiskConfig,
 ) -> float:
     """Return order size in *shares* (0 = don't trade)."""
-    if signal.fair_value is not None:
-        f = kelly_fraction_binary(signal.fair_value, price, signal.side)
-    else:
-        # No probabilistic estimate: fall back to edge-proportional stake
-        f = min(signal.edge * 2.0, 0.5)
-    f *= cfg.kelly_fraction * min(max(signal.confidence, 0.0), 1.0)
-    f = min(f, cfg.max_kelly_stake_pct)
-    notional = equity * f
-    notional = min(notional, cfg.max_position_per_market)
-    if notional < cfg.min_order_notional:
-        return 0.0
-    cost_per_share = price if signal.side == Side.BUY else (1.0 - price)
-    if cost_per_share <= 0:
-        return 0.0
-    return notional / cost_per_share
+    size, _ = size_order_explain(signal, equity, price, cfg)
+    return size

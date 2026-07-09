@@ -317,6 +317,49 @@ Paper trading = the bot trades **live, real markets** with **pretend
 money**. It's the dress rehearsal. Real prices, real order books, real
 timing — zero financial risk.
 
+### The recommended way: the dashboard
+
+```bash
+quantbot dashboard
+# then open  http://localhost:8000  in your browser
+```
+
+This starts the paper trading engine **and** a live web dashboard — your
+command center. You get, updating in real time:
+
+- **Top bar** — equity, cash, buying power, unrealized/realized PnL,
+  daily/weekly/monthly returns, drawdown, and the kill-switch status.
+- **Equity & drawdown chart**, exposure by market, portfolio allocation.
+- **Markets table** — live prices, order-book depth, fair value from every
+  model, model disagreement, and book imbalance. Click a row for detail.
+- **Live activity feed** — every signal, order, fill, and *decision*
+  (including rejected ones, with the exact reason). Click any decision to
+  see the full playback: the evidence, every model's estimate, the
+  position-sizing math step by step, the risk verdict, fees, and slippage.
+- **Closed trades** — click one for its post-trade report: exit reason,
+  PnL, whether the entry hypothesis was actually correct, and what the
+  strategy learned.
+- **Strategy pipeline** — each strategy's stage (research → backtesting →
+  paper → candidate → live) with its promotion-criteria checklist. Live is
+  never reached automatically.
+- **Daily report** — auto-generated at the end of each UTC day (also saved
+  to `reports/`), with the leaderboard, best/worst trades, missed
+  opportunities, risk events, and suggestions.
+
+The engine **checkpoints its state every cycle**: if the machine reboots or
+the process crashes, restarting `quantbot dashboard` resumes the same run —
+same cash, same positions, same run ID. It also auto-restarts internally
+after crashes and reconnects after network drops, so it can run unattended
+for weeks. Useful variants:
+
+```bash
+quantbot dashboard --observe        # dashboard only, no trading
+quantbot dashboard --no-resume      # start a fresh run
+quantbot dashboard --top 20 --poll 15
+```
+
+### The headless way (no browser needed)
+
 ```bash
 quantbot paper run --top 10 --poll 30
 ```

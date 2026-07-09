@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QuantBot — Trading Desk</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/vendor/echarts.min.js"></script>
+</head>
+<body>
+<header id="topbar">
+  <div class="brand">Quant<span>Bot</span> <em id="mode-badge">paper</em></div>
+  <div class="kpis">
+    <div class="kpi"><label>Equity</label><b id="kpi-equity">—</b></div>
+    <div class="kpi"><label>Cash</label><b id="kpi-cash">—</b></div>
+    <div class="kpi"><label>Buying power</label><b id="kpi-bp">—</b></div>
+    <div class="kpi"><label>Unrealized</label><b id="kpi-upnl">—</b></div>
+    <div class="kpi"><label>Realized</label><b id="kpi-rpnl">—</b></div>
+    <div class="kpi"><label>Day</label><b id="kpi-day">—</b></div>
+    <div class="kpi"><label>Week</label><b id="kpi-week">—</b></div>
+    <div class="kpi"><label>Month</label><b id="kpi-month">—</b></div>
+    <div class="kpi"><label>Drawdown</label><b id="kpi-dd">—</b></div>
+  </div>
+  <div class="statusgrp">
+    <span id="kill-badge" class="badge ok" title="Risk kill switch">KS armed</span>
+    <span id="conn-badge" class="badge warn">connecting…</span>
+  </div>
+</header>
+
+<main id="grid">
+  <section class="panel span2" id="p-equity">
+    <h2>Equity &amp; drawdown <small id="run-id"></small></h2>
+    <div id="chart-equity" class="chart tall"></div>
+  </section>
+
+  <section class="panel" id="p-risk">
+    <h2>Risk</h2>
+    <div class="riskrow">
+      <div><label>Exposure</label><b id="risk-exposure">—</b></div>
+      <div><label>Exposure cap</label><b id="risk-cap">—</b></div>
+      <div><label>Kill switch at</label><b id="risk-ks">—</b></div>
+    </div>
+    <div id="chart-exposure" class="chart"></div>
+  </section>
+
+  <section class="panel" id="p-alloc">
+    <h2>Allocation</h2>
+    <div id="chart-alloc" class="chart"></div>
+  </section>
+
+  <section class="panel span2" id="p-markets">
+    <h2>Markets <small>click a row for fair-value detail</small></h2>
+    <div class="scroll"><table id="tbl-markets">
+      <thead><tr><th>Market</th><th>Bid</th><th>Ask</th><th>Mid</th><th>Spread</th>
+        <th>Fair value</th><th>Disagreement</th><th>Imbalance</th><th>Book</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </section>
+
+  <section class="panel" id="p-positions">
+    <h2>Positions</h2>
+    <div class="scroll"><table id="tbl-positions">
+      <thead><tr><th>Market</th><th>Side</th><th>Size</th><th>Avg</th><th>Mark</th><th>uPnL</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </section>
+
+  <section class="panel" id="p-strategies">
+    <h2>Strategy pipeline</h2>
+    <div id="strategy-cards"></div>
+  </section>
+
+  <section class="panel span2" id="p-activity">
+    <h2>Live activity <small>signals · orders · fills · decisions</small></h2>
+    <div id="feed" class="scroll feed"></div>
+  </section>
+
+  <section class="panel" id="p-trades">
+    <h2>Closed trades <small>click for post-trade report</small></h2>
+    <div class="scroll"><table id="tbl-trades">
+      <thead><tr><th>Time</th><th>Strategy</th><th>Market</th><th>PnL</th><th>Exit</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </section>
+
+  <section class="panel" id="p-metrics">
+    <h2>Performance metrics</h2>
+    <div id="metrics-grid" class="metricsgrid"></div>
+    <div id="chart-rolling" class="chart short"></div>
+  </section>
+
+  <section class="panel" id="p-logs">
+    <h2>System log &amp; alerts</h2>
+    <div id="logfeed" class="scroll feed mono"></div>
+  </section>
+
+  <section class="panel" id="p-research">
+    <h2>Research &amp; reports</h2>
+    <div class="riskrow">
+      <div><label>Experiments</label><b id="res-experiments">—</b></div>
+      <div><label>Health</label><b id="res-health">—</b></div>
+    </div>
+    <button id="btn-daily" class="btn">View today's report</button>
+    <div id="daily-report" class="scroll report hidden"></div>
+  </section>
+</main>
+
+<div id="modal" class="hidden"><div id="modal-card">
+  <button id="modal-close">×</button><div id="modal-body"></div>
+</div></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
