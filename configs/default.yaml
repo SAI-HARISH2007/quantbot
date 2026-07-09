@@ -18,15 +18,18 @@ costs:
   maker_fee_bps: 0.0
   extra_slippage: 0.001
 
+# Conservative by design — capital preservation comes before returns.
+# Each knob is explained in HOW_TO_USE_QUANTBOT.md §10. If you are unsure,
+# do not change these.
 risk:
-  initial_capital: 10000.0
-  max_position_per_market: 500.0
-  max_total_exposure: 5000.0
-  max_drawdown_pct: 0.15
-  kelly_fraction: 0.25
-  max_kelly_stake_pct: 0.05
-  min_edge: 0.02
-  min_order_notional: 5.0
+  initial_capital: 10000.0        # paper money to start with
+  max_position_per_market: 200.0  # max $ in any single market (2% of capital)
+  max_total_exposure: 2000.0      # max $ at risk across ALL markets (20%)
+  max_drawdown_pct: 0.10          # lose 10% from peak -> all trading halts
+  kelly_fraction: 0.10            # bet 10% of the "optimal" bet (safety margin)
+  max_kelly_stake_pct: 0.02       # never more than 2% of equity on one trade
+  min_edge: 0.02                  # ignore opportunities smaller than 2 cents
+  min_order_notional: 5.0         # Polymarket's minimum order size
 
 backtest:
   fill_at: cross

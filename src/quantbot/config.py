@@ -50,12 +50,16 @@ class CostConfig(BaseModel):
 
 
 class RiskConfig(BaseModel):
+    """Defaults are deliberately conservative (capital preservation first).
+    Loosen only with evidence; never exceed the documented ceilings in
+    HOW_TO_USE_QUANTBOT.md §10."""
+
     initial_capital: float = 10_000.0
-    max_position_per_market: float = 500.0  # USDC notional
-    max_total_exposure: float = 5_000.0  # USDC notional
-    max_drawdown_pct: float = 0.15  # kill switch
-    kelly_fraction: float = 0.25  # fractional Kelly
-    max_kelly_stake_pct: float = 0.05  # hard cap per trade as % of equity
+    max_position_per_market: float = 200.0  # USDC notional (2% of capital)
+    max_total_exposure: float = 2_000.0  # USDC notional (20% of capital)
+    max_drawdown_pct: float = 0.10  # kill switch halts all new trades
+    kelly_fraction: float = 0.10  # fraction of full Kelly (full Kelly = ruin risk)
+    max_kelly_stake_pct: float = 0.02  # hard cap per trade as % of equity
     min_edge: float = 0.02  # ignore signals with < 2c expected edge
     min_order_notional: float = 5.0
 
