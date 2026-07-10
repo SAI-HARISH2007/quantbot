@@ -106,6 +106,27 @@ and applying slippage/fees. `LiveBroker` (gated behind the `live` extra,
 env-var credentials, and `allow_live=True`) posts real orders via
 py-clob-client.
 
+## Multi-market architecture (in progress)
+
+Markets are plugins behind `markets/base.py::MarketAdapter` — the engine
+speaks only `Instrument` (venue-neutral, with an explicit `PayoffType`) and
+the adapter interface (`list_instruments / get_book / get_history /
+stream_books`). `AdapterRegistry` maps config names to implementations.
+
+| Venue | Data | Paper execution | Notes |
+|---|---|---|---|
+| `polymarket` | ✅ complete | ✅ complete | reference adapter; binary payoff |
+| `binance_spot` | ✅ complete | ⏳ next | linear payoff; needs linear sizing path |
+| perps / forex / equities / ETFs / futures | planned | planned | one connector file each, same contract |
+
+The deliberate hard part is **payoff semantics, not connectivity**: binary
+contracts (Kelly-for-binary sizing, complement conversion, $0/$1
+settlement) versus linear assets (fractional Kelly on return distributions,
+shorting, funding). Sizing/settlement will move behind per-payoff policies
+selected by `Instrument.payoff` before any linear venue trades — the risk
+framework must never silently apply binary math to a linear instrument.
+Options are last: they need a vol surface, not just a feed.
+
 ## Known simplifications (tracked, deliberate)
 
 * Backtests use synthetic spreads because historical full books are not

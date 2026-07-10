@@ -40,6 +40,7 @@ class Hub:
         self.status: dict = {}
         self.events: deque[dict] = deque(maxlen=400)   # signals/orders/fills/alerts
         self.logs: deque[dict] = deque(maxlen=300)
+        self.thinking: deque[dict] = deque(maxlen=60)
 
     async def emit(self, etype: str, data: dict) -> None:
         msg = {"type": etype, "data": data,
@@ -52,6 +53,8 @@ class Hub:
             self.events.appendleft(msg)
         elif etype == "log":
             self.logs.appendleft(msg)
+        elif etype == "thinking":
+            self.thinking.appendleft(msg)
         dead = []
         for ws in self.clients:
             try:
@@ -69,6 +72,7 @@ class Hub:
                 "markets": list(self.markets.values()),
                 "events": list(self.events)[:150],
                 "logs": list(self.logs)[:100],
+                "thinking": list(self.thinking)[:40],
             },
         }
 

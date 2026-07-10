@@ -310,6 +310,7 @@ async function refreshSlow() {
     $("#risk-cap").textContent = fmt$(rl.max_total_exposure);
     $("#risk-ks").textContent = rl.max_drawdown_pct != null ? fmtPct(-rl.max_drawdown_pct, false) + " DD" : "—";
     renderStatus(); renderEquityChart(); renderMetrics(); renderStrategies(); renderTrades();
+    document.dispatchEvent(new CustomEvent("qb-slow", { detail: { summary, metrics, strategies } }));
   } catch (e) { console.error("refresh failed", e); }
 }
 
@@ -328,6 +329,8 @@ function connect() {
   ws.onerror = () => ws.close();
   ws.onmessage = (e) => {
     const msg = JSON.parse(e.data);
+    // desk.js (command-center layer) listens on this bus
+    document.dispatchEvent(new CustomEvent("qb", { detail: msg }));
     if (msg.type === "snapshot") {
       const d = msg.data;
       if (d.status && Object.keys(d.status).length) state.status = d.status;

@@ -27,7 +27,26 @@
   </div>
 </header>
 
+<div id="ticker"><div id="ticker-track"></div></div>
+
 <main id="grid">
+  <section class="panel span2" id="p-flow">
+    <h2>Execution pipeline <small id="regime-badge" class="regime">warming up</small></h2>
+    <div id="flow">
+      <div class="node" id="n-data"><i>◈</i>Market data</div><span class="pipe"></span>
+      <div class="node" id="n-models"><i>ƒ</i>Models</div><span class="pipe"></span>
+      <div class="node" id="n-signal"><i>⚡</i>Signal</div><span class="pipe"></span>
+      <div class="node" id="n-risk"><i>🛡</i>Risk</div><span class="pipe"></span>
+      <div class="node" id="n-exec"><i>▶</i>Execution</div>
+    </div>
+    <div id="thinking" class="mono"></div>
+  </section>
+
+  <section class="panel" id="p-radar">
+    <h2>Signal radar <small>edge vs confidence, fading with age</small></h2>
+    <div id="chart-radar" class="chart"></div>
+  </section>
+
   <section class="panel span2" id="p-equity">
     <h2>Equity &amp; drawdown <small id="run-id"></small></h2>
     <div id="chart-equity" class="chart tall"></div>
@@ -109,6 +128,20 @@
   <button id="modal-close">×</button><div id="modal-body"></div>
 </div></div>
 
+<div id="toasts"></div>
+<div id="help-overlay" class="hidden"><div id="help-card">
+  <h3>Keyboard shortcuts</h3>
+  <table>
+    <tr><td><kbd>/</kbd></td><td>filter markets</td></tr>
+    <tr><td><kbd>d</kbd></td><td>toggle daily report</td></tr>
+    <tr><td><kbd>t</kbd></td><td>jump to trades</td></tr>
+    <tr><td><kbd>m</kbd></td><td>jump to markets</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td>close dialogs</td></tr>
+    <tr><td><kbd>?</kbd></td><td>this help</td></tr>
+  </table>
+</div></div>
+
 <script src="/static/app.js"></script>
+<script src="/static/desk.js"></script>
 </body>
 </html>

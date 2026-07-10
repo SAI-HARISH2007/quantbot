@@ -439,12 +439,30 @@ class PaperRunner:
                 now = datetime.now(timezone.utc)
                 await self._refresh_candles()
                 for m in markets:
+                    await self.sink("thinking", {
+                        "phase": "data", "market": m.question,
+                        "condition_id": m.condition_id,
+                        "text": f"Fetching books for “{m.question[:60]}”",
+                    })
                     await self._fetch_book(m.yes_token_id)
                     await self._fetch_book(m.no_token_id)
                     view = self._view_for(m, now)
                     if view is None:
                         continue
                     await self._emit_market(m, view)
+                    fv = self._last_fv.get(m.condition_id, {})
+                    if fv.get("prob") is not None and view.price is not None:
+                        edge = fv["prob"] - view.price
+                        await self.sink("thinking", {
+                            "phase": "models", "market": m.question,
+                            "condition_id": m.condition_id,
+                            "edge": edge,
+                            "text": (
+                                f"Fair value {fv['prob']:.3f}±{fv['std']:.3f} vs price "
+                                f"{view.price:.3f} → edge {edge:+.3f} "
+                                f"({len(fv.get('models', {}))} models)"
+                            ),
+                        })
                     for strat in self.strategies:
                         for sig in strat.on_view(view):
                             await self.sink("signal", {
@@ -484,6 +502,33 @@ class PaperRunner:
             await self.binance.close()
             logger.info("paper run %s stopped; state checkpointed", self.run_id)
 
+    # ------------------------------------------------------------- regime
+    def _regime(self) -> dict:
+        """Simple, honest regime gauge: BTC realized vol percentile vs its own
+        recent history + average Polymarket spread. Not a prediction — a
+        description of current conditions."""
+        vol_pct = None
+        btc = self._candles.get("BTCUSDT")
+        if btc is not None and len(btc) > 120:
+            import numpy as np
+
+            r = np.log(btc["close"]).diff().dropna()
+            recent = float(r.tail(60).std())
+            windows = r.rolling(60).std().dropna()
+            if len(windows) > 10 and windows.max() > 0:
+                vol_pct = float((windows < recent).mean())
+        spreads = [b.spread for b in self._book_cache.values() if b.spread is not None]
+        avg_spread = sum(spreads) / len(spreads) if spreads else None
+        if vol_pct is None:
+            label = "warming up"
+        elif vol_pct > 0.85:
+            label = "volatile"
+        elif vol_pct > 0.55:
+            label = "active"
+        else:
+            label = "calm"
+        return {"label": label, "vol_percentile": vol_pct, "avg_spread": avg_spread}
+
     # ------------------------------------------------------------- status
     def status(self) -> dict:
         marks = self._marks()
@@ -491,6 +536,7 @@ class PaperRunner:
         exposure = self.portfolio.exposure(marks)
         return {
             "run_id": self.run_id,
+            "regime": self._regime(),
             "started_at": self.started_at.isoformat(),
             "cycle": self.cycle_count,
             "last_cycle_at": self.last_cycle_at.isoformat() if self.last_cycle_at else None,
