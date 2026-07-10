@@ -102,6 +102,7 @@ def create_app(
     top: int = 10,
     poll: float = 30.0,
     resume: bool = True,
+    mode: "object | None" = None,
 ) -> FastAPI:
     hub = Hub()
     runner_ref: dict = {"runner": None}
@@ -123,7 +124,7 @@ def create_app(
             strategies = build_strategies(cfg.strategies)
             runner = PaperRunner(
                 cfg, store, strategies, fair_value=_default_fair_value(),
-                poll_seconds=poll, sink=hub.emit, resume=resume,
+                poll_seconds=poll, sink=hub.emit, resume=resume, mode=mode,
             )
             runner_ref["runner"] = runner
 
@@ -157,8 +158,16 @@ def create_app(
                             "level": "info",
                             "message": f"Daily report generated: {path.name}",
                         })
+                        # weekly journal on Mondays, monthly on the 1st —
+                        # same generator over a wider window
+                        from quantbot.reporting.daily import write_period_report
+
+                        if today.weekday() == 0:
+                            write_period_report(store, days=7, label="weekly")
+                        if today.day == 1:
+                            write_period_report(store, days=30, label="monthly")
                     except Exception:  # noqa: BLE001
-                        logger.exception("daily report generation failed")
+                        logger.exception("report generation failed")
                     last_day = today
 
         tasks.append(asyncio.create_task(_daily_report_scheduler()))
@@ -301,6 +310,24 @@ def create_app(
 
         d = _date.fromisoformat(day) if day else None
         return build_daily_report(store, d)
+
+    @app.get("/api/replay")
+    def replay(day: str) -> list[dict]:
+        """Ordered timeline of everything the system saw and did on a day."""
+        timeline: list[dict] = []
+        for d in store.load_decisions(limit=5000):
+            if d["ts"][:10] == day:
+                timeline.append({"ts": d["ts"], "kind": "decision", "data": d})
+        for r in store.load_trade_reports(limit=2000):
+            if r["ts"][:10] == day:
+                timeline.append({"ts": r["ts"], "kind": "trade_closed", "data": r})
+        eq = store.load_equity_history()
+        for _, row in eq.iterrows():
+            ts = str(row["ts"])
+            if ts[:10] == day:
+                timeline.append({"ts": ts, "kind": "equity",
+                                 "data": {"equity": float(row["equity"])}})
+        return sorted(timeline, key=lambda e: e["ts"])
 
     @app.get("/api/health")
     def health() -> dict:

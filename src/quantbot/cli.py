@@ -297,19 +297,37 @@ def dashboard(
     poll: float = typer.Option(30.0, help="Poll interval seconds"),
     observe: bool = typer.Option(False, help="Dashboard only — no paper trading"),
     resume: bool = typer.Option(True, help="Resume previous paper run state"),
+    mode: str = typer.Option("paper", help="Execution mode: paper | shadow | live_*"),
 ):
-    """Run the trading dashboard (paper engine + web UI at http://localhost:PORT)."""
+    """Run the trading dashboard (engine + web UI at http://localhost:PORT)."""
     import uvicorn
 
     cfg = _boot(config)
     from quantbot.api.server import create_app
+    from quantbot.execution.modes import (
+        CONFIRM_PHRASE, ExecutionMode, PROFILES, require_live_confirmation,
+    )
 
+    exec_mode = ExecutionMode(mode)
+    if exec_mode.is_live:
+        require_live_confirmation(exec_mode, interactive_ok=False if not
+                                  __import__("sys").stdin.isatty() else True)
+        profile = PROFILES[exec_mode]
+        console.print(
+            f"[bold red]LIVE MODE REQUESTED: {exec_mode.value}[/bold red] — "
+            f"{profile.description}. Real money can be lost."
+        )
+        typed = typer.prompt("Type the acknowledgement phrase to continue")
+        if typed != CONFIRM_PHRASE:
+            console.print("[red]Phrase mismatch — refusing to start live.[/red]")
+            raise typer.Exit(1)
     store = _store(cfg)
     if not observe and not store.load_markets(active_only=True):
         console.print("[red]no markets stored — run `quantbot markets sync` first[/red]")
         raise typer.Exit(1)
     app_ = create_app(
-        cfg, store, with_paper=not observe, top=top, poll=poll, resume=resume
+        cfg, store, with_paper=not observe, top=top, poll=poll, resume=resume,
+        mode=exec_mode,
     )
     console.print(f"[green]QuantBot dashboard: http://localhost:{port}[/green]")
     uvicorn.run(app_, host="127.0.0.1", port=port, log_level="warning")
@@ -333,6 +351,61 @@ def report_runs(strategy: Optional[str] = None):
             str(m.get("n_trades", 0)),
         )
     console.print(t)
+
+
+@report_app.command("replay")
+def report_replay(day: str, config: Optional[Path] = _CONFIG_OPT):
+    """Replay a trading day: every observation, decision, and outcome in order."""
+    cfg = _boot(config)
+    store = _store(cfg)
+    timeline = []
+    for d in store.load_decisions(limit=5000):
+        if d["ts"][:10] == day:
+            timeline.append((d["ts"], "DECISION",
+                f"{d['strategy']} {d['side']} → {d['outcome']}"
+                f" ({d.get('risk_reason','')}) edge={d.get('signal_edge',0):.3f}"
+                f" | {d['market_question'][:55]}"))
+    for r in store.load_trade_reports(limit=2000):
+        if r["ts"][:10] == day:
+            timeline.append((r["ts"], "CLOSE",
+                f"{r['strategy']} PnL ${r['pnl']:.2f} ({r['exit_reason']})"
+                f" hypothesis_correct={r['hypothesis_correct']}"))
+    eq = store.load_equity_history()
+    for _, row in eq.iterrows():
+        ts = str(row["ts"])
+        if ts[:10] == day:
+            timeline.append((ts, "EQUITY", f"${row['equity']:.2f}"))
+    for ts, kind, text in sorted(timeline):
+        console.print(f"[dim]{ts[11:19]}[/dim] [bold]{kind:8s}[/bold] {text}")
+    if not timeline:
+        console.print(f"[yellow]no recorded activity on {day}[/yellow]")
+
+
+@report_app.command("explain")
+def report_explain(decision_id: str, config: Optional[Path] = _CONFIG_OPT):
+    """Explain one decision from its recorded evidence (never reconstructed)."""
+    cfg = _boot(config)
+    for d in _store(cfg).load_decisions(limit=5000):
+        if d["decision_id"] == decision_id:
+            sz = d.get("sizing", {})
+            console.print(f"[bold]{d['strategy']}[/bold] {d['side']} on "
+                          f"“{d['market_question']}” → [bold]{d['outcome']}[/bold]")
+            console.print(f"  Evidence: price={d.get('market_price')}, "
+                          f"fair value={d.get('fair_value')}±{d.get('fair_value_std')}, "
+                          f"models={list((d.get('fair_value_models') or {}))}")
+            console.print(f"  Signal: edge={d.get('signal_edge'):.4f}, "
+                          f"confidence={d.get('signal_confidence'):.2f}, "
+                          f"meta={d.get('signal_metadata')}")
+            console.print(f"  Sizing: {sz.get('method')} → {sz.get('result')} "
+                          f"(notional=${sz.get('notional', 0):.2f})")
+            console.print(f"  Risk: {'approved' if d.get('risk_ok') else 'REJECTED'} "
+                          f"({d.get('risk_reason')})")
+            if d.get("fill_price") is not None:
+                console.print(f"  Fill: {d['fill_size']:.1f} @ {d['fill_price']:.3f}, "
+                              f"fee ${d.get('fee',0):.2f}, slippage {d.get('slippage')}")
+            console.print(f"  Exit policy: {d.get('exit_policy')}")
+            return
+    console.print(f"[red]decision {decision_id} not found[/red]")
 
 
 @report_app.command("fills")

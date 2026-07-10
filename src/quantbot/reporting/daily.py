@@ -161,6 +161,40 @@ def render_markdown(report: dict) -> str:
     return "\n".join(lines)
 
 
+def write_period_report(
+    store: Store, days: int, label: str, out_dir: Path = Path("reports"),
+) -> Path:
+    """Weekly/monthly journal: daily reports aggregated over a window."""
+    end = datetime.now(timezone.utc).date()
+    dailies = [build_daily_report(store, end - timedelta(days=i))
+               for i in range(1, days + 1)]
+    active = [d for d in dailies if d["activity"]["decisions"] > 0]
+    pnl_by_strat: dict[str, float] = {}
+    trades = 0
+    for d in active:
+        trades += d["activity"]["trades_closed"]
+        for s in d["leaderboard"]:
+            pnl_by_strat[s["strategy"]] = pnl_by_strat.get(s["strategy"], 0) + s["pnl"]
+    report = {
+        "label": label,
+        "period_days": days,
+        "end": end.isoformat(),
+        "active_days": len(active),
+        "total_trades_closed": trades,
+        "pnl_by_strategy": dict(sorted(pnl_by_strat.items(), key=lambda kv: -kv[1])),
+        "daily_returns": [
+            {"date": d["date"], "return": d["portfolio"]["day_return"]}
+            for d in dailies if d["portfolio"]["day_return"] is not None
+        ],
+        "all_suggestions": sorted({s for d in active for s in d["suggestions"]}),
+    }
+    out_dir.mkdir(exist_ok=True)
+    path = out_dir / f"{label}-{end.isoformat()}.json"
+    path.write_text(json.dumps(report, indent=2, default=str))
+    logger.info("%s report written: %s", label, path)
+    return path
+
+
 def write_daily_report(store: Store, out_dir: Path = Path("reports"),
                        day: Optional[date] = None) -> Path:
     report = build_daily_report(store, day)

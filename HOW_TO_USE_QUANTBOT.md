@@ -358,6 +358,38 @@ quantbot dashboard --no-resume      # start a fresh run
 quantbot dashboard --top 20 --poll 15
 ```
 
+### Execution modes: one pipeline, graduated stakes
+
+The same engine runs in every mode — only the execution adapter changes:
+
+| Mode | What executes | Risk limits |
+|---|---|---|
+| `paper` (default) | simulated fills on real books | 100% of config |
+| `shadow` | **nothing** — full pipeline incl. risk verdicts, zero orders | n/a |
+| `live_conservative` | real orders | **25%** of your configured limits |
+| `live_normal` | real orders | 50% |
+| `live_aggressive` | real orders | 100% — your ceiling, never beyond |
+
+```bash
+quantbot dashboard --mode shadow     # final rehearsal before live
+```
+
+Shadow mode is the bridge between paper and live: decisions record exactly
+what *would* have been ordered, with outcome `shadow`. Live modes are
+triple-gated — an environment variable with an exact acknowledgement
+phrase, a typed confirmation at startup, and the broker's own credential
+gates — and every live mode *scales limits down*, never up. The kill
+switch threshold is identical in every mode. A **data-quality failsafe**
+also halts trading automatically if most market-data fetches start
+failing; it resumes only on deliberate restart.
+
+Useful review commands:
+
+```bash
+quantbot report replay 2026-07-10        # full timeline of a trading day
+quantbot report explain <decision_id>    # evidence behind one decision
+```
+
 ### The headless way (no browser needed)
 
 ```bash

@@ -60,18 +60,35 @@ class PaperRunner:
         poll_seconds: float = 30.0,
         sink: EventSink = _null_sink,
         resume: bool = False,
+        mode: "ExecutionMode | None" = None,
     ):
+        from quantbot.execution.modes import (
+            ExecutionMode, ShadowBroker, scaled_risk,
+        )
+
         self.cfg = cfg
         self.store = store
         self.strategies = strategies
         self.fair_value = fair_value
         self.poll_seconds = poll_seconds
         self.sink = sink
+        self.mode = mode or ExecutionMode.PAPER
         self.clob = ClobClient(cfg.polymarket)
         self.binance = BinanceClient(cfg.crypto)
         self.portfolio = Portfolio(cfg.risk.initial_capital)
-        self.risk = RiskManager(cfg.risk)
-        self.broker = PaperBroker(self._fetch_book, cfg.costs)
+        # Mode scales limits down (never up); kill switch threshold untouched.
+        self.risk = RiskManager(scaled_risk(cfg.risk, self.mode))
+        if self.mode == ExecutionMode.SHADOW:
+            self.broker = ShadowBroker()
+        elif self.mode.is_live:
+            from quantbot.execution.live import LiveBroker
+
+            self.broker = LiveBroker(allow_live=True)  # its own gates apply
+        else:
+            self.broker = PaperBroker(self._fetch_book, cfg.costs)
+        # data-quality failsafe counters
+        self._fetch_attempts = 0
+        self._fetch_failures = 0
         self._book_cache: dict[str, OrderBook] = {}
         self._history: dict[str, list[tuple[datetime, float]]] = {}
         self._candles: dict[str, pd.DataFrame] = {}
@@ -93,6 +110,14 @@ class PaperRunner:
             logger.info("no previous paper state found; starting fresh")
             return
         run_id, state = loaded
+        saved_mode = state.get("mode", "paper")
+        if saved_mode != self.mode.value:
+            logger.info(
+                "previous state is from mode '%s', current mode is '%s' — "
+                "starting fresh (modes never share portfolios)",
+                saved_mode, self.mode.value,
+            )
+            return
         self.run_id = run_id
         self.portfolio.cash = state["cash"]
         self.portfolio.peak_equity = state.get("peak_equity", self.portfolio.cash)
@@ -114,6 +139,7 @@ class PaperRunner:
         self.store.save_runner_state(
             self.run_id,
             {
+                "mode": self.mode.value,
                 "cash": self.portfolio.cash,
                 "peak_equity": self.portfolio.peak_equity,
                 "positions": {
@@ -128,13 +154,35 @@ class PaperRunner:
 
     # ------------------------------------------------------------- data
     async def _fetch_book(self, token_id: str) -> Optional[OrderBook]:
+        self._fetch_attempts += 1
         try:
             book = await self.clob.get_book(token_id)
             self._book_cache[token_id] = book
             return book
         except Exception as e:  # noqa: BLE001
+            self._fetch_failures += 1
             logger.warning("book fetch failed %s: %s", token_id[:16], e)
             return None
+
+    async def _data_quality_failsafe(self) -> None:
+        """Fail safe, not silent: if most book fetches are failing, halt new
+        trading exactly like the drawdown kill switch and alert the user.
+        Data feeds recover on their own; trading resumes only by restart —
+        a deliberate human step after a data incident."""
+        if self._fetch_attempts >= 6 and self._fetch_failures / self._fetch_attempts > 0.5:
+            if not self.risk.halted:
+                self.risk.halted = True
+                logger.error(
+                    "DATA FAILSAFE: %d/%d book fetches failed — trading halted",
+                    self._fetch_failures, self._fetch_attempts,
+                )
+                await self.sink("alert", {
+                    "level": "critical",
+                    "message": "DATA FAILSAFE: majority of market-data fetches failing — "
+                               "trading halted until restart.",
+                })
+        self._fetch_attempts = 0
+        self._fetch_failures = 0
 
     async def _refresh_candles(self) -> None:
         for sym in self.cfg.crypto.symbols:
@@ -368,8 +416,13 @@ class PaperRunner:
         })
         fill = await self.broker.submit(order)
         if fill is None:
-            decision.outcome = "unfilled"
-            await self.sink("order", {"order_id": order.order_id, "status": "unfilled"})
+            from quantbot.execution.modes import ExecutionMode
+
+            decision.outcome = (
+                "shadow" if self.mode == ExecutionMode.SHADOW else "unfilled"
+            )
+            await self.sink("order", {"order_id": order.order_id,
+                                      "status": decision.outcome})
             await self._finish_decision(decision)
             return
         decision.outcome = "filled"
@@ -474,6 +527,7 @@ class PaperRunner:
                             })
                             await self._handle_signal(sig, m)
                 await self._settle_expired(now)
+                await self._data_quality_failsafe()
                 marks = self._marks()
                 eq = self.portfolio.record_equity(now, marks)
                 was_halted = self.risk.halted
@@ -536,6 +590,7 @@ class PaperRunner:
         exposure = self.portfolio.exposure(marks)
         return {
             "run_id": self.run_id,
+            "mode": self.mode.value,
             "regime": self._regime(),
             "started_at": self.started_at.isoformat(),
             "cycle": self.cycle_count,
