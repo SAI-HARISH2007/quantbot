@@ -64,6 +64,18 @@ class RiskConfig(BaseModel):
     min_order_notional: float = 5.0
 
 
+class AnalysisConfig(BaseModel):
+    """Technical market-context layer (ANALYSIS ONLY — see analysis/technical.py).
+    Safe to disable at any time; the engine runs identically without it."""
+
+    enabled: bool = True
+    provider: str = "tradingview"
+    exchange: str = "BINANCE"
+    timeframe: str = "1h"
+    scan_timeframe: str = "4h"
+    cache_ttl: float = 120.0
+
+
 class BacktestConfig(BaseModel):
     fill_at: str = "cross"  # 'cross' = pay the spread; 'mid' = optimistic
     latency_ms: float = 500.0
@@ -84,6 +96,7 @@ class AppConfig(BaseSettings):
     costs: CostConfig = CostConfig()
     risk: RiskConfig = RiskConfig()
     backtest: BacktestConfig = BacktestConfig()
+    analysis: AnalysisConfig = AnalysisConfig()
     strategies: list[StrategyConfig] = Field(default_factory=list)
     log_level: str = "INFO"
 

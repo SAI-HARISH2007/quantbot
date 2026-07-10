@@ -40,6 +40,9 @@ class DecisionRecord(BaseModel):
     fair_value_std: Optional[float] = None      # ensemble uncertainty
     fair_value_models: dict = Field(default_factory=dict)  # model -> {prob, std}
     expected_value: Optional[float] = None      # edge per share, prob units
+    # Supplementary technical context (analysis layer, if enabled) — evidence
+    # recorded for explainability, never a trade trigger by itself.
+    technical_context: dict = Field(default_factory=dict)
     # --- the sizing math ---
     sizing: dict = Field(default_factory=dict)  # full breakdown from size_order_explain
     # --- the risk verdict ---

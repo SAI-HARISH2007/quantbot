@@ -95,9 +95,28 @@ function toast(kind, text, ms = 5000) {
   setTimeout(() => { el.classList.remove("show"); setTimeout(() => el.remove(), 400); }, ms);
 }
 
+/* ---------- market context (technical analysis layer) ---------- */
+function renderTechnical(t) {
+  if (!t || !t.snapshots) return;
+  $$("#tech-provider").textContent = `via ${t.provider} — analysis only, never a trade trigger`;
+  const recColor = (r) => r.includes("BUY") ? "pos" : r.includes("SELL") ? "neg" : "dim";
+  $$("#tech-snaps").innerHTML = Object.values(t.snapshots).map((s) => `
+    <div class="ev"><b>${escd(s.symbol)}</b>
+      <span class="${recColor(s.recommendation || "")}">${escd(s.recommendation)}</span>
+      <span class="dim">RSI ${s.rsi ? s.rsi.toFixed(0) : "—"} ·
+      BBW ${s.bb_width ? s.bb_width.toFixed(3) : "—"} ·
+      ADX ${s.adx ? s.adx.toFixed(0) : "—"}</span></div>`).join("");
+  const scans = t.scans || {};
+  $$("#tech-scans").innerHTML = Object.entries(scans).map(([kind, rows]) => `
+    <div class="thought"><span class="ph models">${kind.replace("_", " ")}</span>
+    ${rows.slice(0, 5).map((r) => `${escd(r.symbol)}${r.change_pct != null ? " " + (r.change_pct > 0 ? "+" : "") + r.change_pct.toFixed(1) + "%" : ""}${r.bbw != null ? " bbw " + r.bbw.toFixed(3) : ""}`).join(" · ")}</div>`).join("");
+}
+
 /* ---------- event bus ---------- */
 document.addEventListener("qb", (e) => {
   const { type, data } = e.detail;
+  if (type === "technical") renderTechnical(data);
+  if (type === "snapshot" && data.technical) renderTechnical(data.technical);
   if (type === "market" || type === "snapshot") {
     const ms = type === "snapshot" ? (data.markets || []) : [data];
     ms.forEach((m) => {

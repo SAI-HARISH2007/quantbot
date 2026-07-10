@@ -118,3 +118,11 @@ full books are not available, therefore:
 5. Online recalibration of ensemble weights from rolling Brier scores
    (simple online learning before any RL is considered; RL only if it beats
    the online-weights baseline OOS).
+
+### H8 — technical-context agreement (added 2026-07-10)
+TradingView-derived indicators (rating, RSI, BBW squeeze, ADX) are now
+recorded on every decision (`technical_context`) via the analysis layer
+(docs/INTEGRATIONS.md). Hypothesis: signals whose direction agrees with the
+underlying trend context outperform those that fight it. Test by
+stratifying paper/backtest results on recorded context — never by wiring
+the indicator into a strategy untested.

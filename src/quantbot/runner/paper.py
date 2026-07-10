@@ -89,6 +89,15 @@ class PaperRunner:
         # data-quality failsafe counters
         self._fetch_attempts = 0
         self._fetch_failures = 0
+        # technical context (analysis layer — data only, cannot trade)
+        from quantbot.analysis.technical import build_provider
+
+        self.technical = build_provider(
+            cfg.analysis.enabled, cfg.analysis.provider,
+            cfg.analysis.exchange, cfg.analysis.cache_ttl,
+        )
+        self._tech_snaps: dict[str, dict] = {}   # symbol -> snapshot dict
+        self._tech_scans: dict[str, list] = {}   # kind -> rows
         self._book_cache: dict[str, OrderBook] = {}
         self._history: dict[str, list[tuple[datetime, float]]] = {}
         self._candles: dict[str, pd.DataFrame] = {}
@@ -192,6 +201,32 @@ class PaperRunner:
             except Exception as e:  # noqa: BLE001
                 logger.warning("candle refresh failed %s: %s", sym, e)
 
+    async def _refresh_technical(self) -> None:
+        """Refresh technical snapshots for tracked symbols + market scans.
+        Failures degrade silently to 'no context' — analysis never blocks
+        or halts trading."""
+        for sym in self.cfg.crypto.symbols:
+            snap = await self.technical.snapshot(sym, self.cfg.analysis.timeframe)
+            if snap:
+                self._tech_snaps[sym] = snap.to_dict()
+                logger.info(
+                    "technical %s %s: %s RSI=%.1f BBW=%s ADX=%s",
+                    sym, snap.timeframe, snap.recommendation,
+                    snap.rsi or 0,
+                    f"{snap.bb_width:.4f}" if snap.bb_width else "n/a",
+                    f"{snap.adx:.0f}" if snap.adx else "n/a",
+                )
+        for kind in ("bollinger_squeeze", "top_gainers"):
+            rows = await self.technical.scan(
+                kind, timeframe=self.cfg.analysis.scan_timeframe, limit=8)
+            if rows:
+                self._tech_scans[kind] = rows
+        if self._tech_snaps or self._tech_scans:
+            await self.sink("technical", {
+                "snapshots": self._tech_snaps, "scans": self._tech_scans,
+                "provider": self.technical.name,
+            })
+
     def _marks(self) -> dict[str, float]:
         return {t: b.mid for t, b in self._book_cache.items() if b.mid is not None}
 
@@ -221,9 +256,12 @@ class PaperRunner:
             "models": fv.detail if fv else {},
         }
         no_book = self._book_cache.get(market.no_token_id)
+        extra: dict = {"technical": self._tech_snaps} if self._tech_snaps else {}
+        if no_book:
+            extra["no_book"] = no_book
         return MarketView(
             now=now, market=market, price=book.mid, book=book, history=hist_df,
-            fair_value=fv, extra={"no_book": no_book} if no_book else {},
+            fair_value=fv, extra=extra,
         )
 
     async def _emit_market(self, market: MarketInfo, view: MarketView) -> None:
@@ -340,6 +378,13 @@ class PaperRunner:
         decision.fair_value = fvs.get("prob")
         decision.fair_value_std = fvs.get("std")
         decision.fair_value_models = fvs.get("models", {})
+        # attach the underlying's technical snapshot when the market has one
+        # (crypto threshold markets) — supplementary evidence in the record
+        from quantbot.fairvalue.digital_option import parse_threshold_market
+
+        parsed = parse_threshold_market(market)
+        if parsed and parsed["symbol"] in self._tech_snaps:
+            decision.technical_context = self._tech_snaps[parsed["symbol"]]
 
         pos = self.portfolio.positions.get(sig.token_id)
         exit_trade = sig.side == Side.SELL and pos is not None and pos.size > 0
@@ -491,6 +536,7 @@ class PaperRunner:
             while True:
                 now = datetime.now(timezone.utc)
                 await self._refresh_candles()
+                await self._refresh_technical()
                 for m in markets:
                     await self.sink("thinking", {
                         "phase": "data", "market": m.question,

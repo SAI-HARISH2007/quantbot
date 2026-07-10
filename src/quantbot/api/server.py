@@ -41,6 +41,7 @@ class Hub:
         self.events: deque[dict] = deque(maxlen=400)   # signals/orders/fills/alerts
         self.logs: deque[dict] = deque(maxlen=300)
         self.thinking: deque[dict] = deque(maxlen=60)
+        self.technical: dict = {}
 
     async def emit(self, etype: str, data: dict) -> None:
         msg = {"type": etype, "data": data,
@@ -55,6 +56,8 @@ class Hub:
             self.logs.appendleft(msg)
         elif etype == "thinking":
             self.thinking.appendleft(msg)
+        elif etype == "technical":
+            self.technical = data
         dead = []
         for ws in self.clients:
             try:
@@ -73,6 +76,7 @@ class Hub:
                 "events": list(self.events)[:150],
                 "logs": list(self.logs)[:100],
                 "thinking": list(self.thinking)[:40],
+                "technical": self.technical,
             },
         }
 
@@ -310,6 +314,10 @@ def create_app(
 
         d = _date.fromisoformat(day) if day else None
         return build_daily_report(store, d)
+
+    @app.get("/api/technical")
+    def technical() -> dict:
+        return hub.technical
 
     @app.get("/api/replay")
     def replay(day: str) -> list[dict]:
