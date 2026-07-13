@@ -12,3 +12,5 @@ data/
 experiments/runs/
 *.log
 .env
+reports/
+linkedin_post/
