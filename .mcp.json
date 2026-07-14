@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "tradingview": {
-      "command": "uv",
-      "args": ["run", "--directory", "~/vendor/tradingview-mcp", "tradingview-mcp"],
-      "description": "TradingView market analysis for the AI copilot (36 tools: indicators, screeners, sentiment). ANALYSIS ONLY — has no access to QuantBot execution. Runs in its own isolated env via uv; see docs/INTEGRATIONS.md."
-    }
-  }
-}
